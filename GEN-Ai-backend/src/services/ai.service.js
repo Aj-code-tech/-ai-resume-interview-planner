@@ -2,10 +2,42 @@ const { GoogleGenAI } = require("@google/genai")
 const { z } = require("zod")
 const { zodToJsonSchema } = require("zod-to-json-schema")
 const puppeteer = require("puppeteer")
+const fs = require("fs")
 
-const ai = new GoogleGenAI({
-    apiKey: process.env.GOOGLE_GENAI_API_KEY
-})
+function getAiClient() {
+    const apiKey = (process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim()
+    if (!apiKey) {
+        throw new Error("Gemini API key is not configured. Please set GOOGLE_GENAI_API_KEY or GEMINI_API_KEY in environment variables.")
+    }
+    return new GoogleGenAI({ apiKey })
+}
+
+async function generateContentWithRetry(ai, requestConfig) {
+    const models = ["gemini-3.6-flash", "gemini-3.5-flash"]
+    let lastError
+    for (const model of models) {
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                const response = await ai.models.generateContent({
+                    ...requestConfig,
+                    model
+                })
+                if (response && response.text) {
+                    return response
+                }
+            } catch (err) {
+                lastError = err
+                if (err?.status === 503 || err?.message?.includes("503") || err?.status === 429) {
+                    console.warn(`Model ${model} attempt ${attempt} hit ${err?.status || 'transient error'}, retrying...`)
+                    await new Promise(res => setTimeout(res, 1000))
+                } else {
+                    break
+                }
+            }
+        }
+    }
+    throw lastError || new Error("Gemini generation failed across all available models.")
+}
 
 
 // ===============================
@@ -177,19 +209,13 @@ IMPORTANT:
 Return the response strictly according to the provided JSON schema.
 `
 
-        const response = await ai.models.generateContent({
+        const ai = getAiClient()
 
-            // IMPORTANT:
-            // gemini-2.0-flash is no longer available
-            model: "gemini-3.6-flash",
-
+        const response = await generateContentWithRetry(ai, {
             contents: prompt,
-
             config: {
                 responseMimeType: "application/json",
-
-                responseSchema:
-                    z.toJSONSchema(interviewReportSchema)
+                responseSchema: z.toJSONSchema(interviewReportSchema)
             }
         })
 
@@ -197,7 +223,13 @@ Return the response strictly according to the provided JSON schema.
             throw new Error("Gemini returned an empty response")
         }
 
-        const report = JSON.parse(response.text)
+        let report
+        try {
+            report = JSON.parse(response.text)
+        } catch (parseErr) {
+            const cleaned = response.text.replace(/```(?:json)?\n?/g, "").replace(/```/g, "").trim()
+            report = JSON.parse(cleaned)
+        }
 
         if (!report.title) {
             throw new Error("Gemini did not return a job title")
@@ -221,10 +253,32 @@ Return the response strictly according to the provided JSON schema.
 // GENERATE PDF FROM HTML
 // ===============================
 
+function getFallbackExecutablePath() {
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        return process.env.PUPPETEER_EXECUTABLE_PATH
+    }
+    const candidates = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
+    ]
+    for (const p of candidates) {
+        try {
+            if (fs.existsSync(p)) return p
+        } catch (_) {}
+    }
+    return undefined
+}
+
 async function generatePdfFromHtml(htmlContent) {
 
-    const browser = await puppeteer.launch({
-        headless: "new",
+    const launchOptions = {
+        headless: true,
         args: [
             "--no-sandbox",
             "--disable-setuid-sandbox",
@@ -232,9 +286,25 @@ async function generatePdfFromHtml(htmlContent) {
             "--disable-gpu",
             "--no-first-run",
             "--no-zygote",
-            "--single-process"
+            "--disable-extensions"
         ]
-    })
+    }
+
+    let browser
+    try {
+        browser = await puppeteer.launch(launchOptions)
+    } catch (launchErr) {
+        console.warn("Standard puppeteer launch failed, trying fallback executable path:", launchErr.message)
+        const fallbackPath = getFallbackExecutablePath()
+        if (fallbackPath) {
+            browser = await puppeteer.launch({
+                ...launchOptions,
+                executablePath: fallbackPath
+            })
+        } else {
+            throw new Error(`Puppeteer could not launch Chrome: ${launchErr.message}. Ensure Chrome is installed.`)
+        }
+    }
 
     try {
 
@@ -262,7 +332,9 @@ async function generatePdfFromHtml(htmlContent) {
 
     } finally {
 
-        await browser.close()
+        if (browser) {
+            await browser.close()
+        }
     }
 }
 
@@ -366,19 +438,13 @@ CONTENT REQUIREMENTS:
 - Return ONLY the requested JSON format containing the complete HTML string in the "html" property.
 `
 
-        const response = await ai.models.generateContent({
+        const ai = getAiClient()
 
-            // IMPORTANT:
-            // Use an available Gemini model
-            model: "gemini-3.6-flash",
-
+        const response = await generateContentWithRetry(ai, {
             contents: prompt,
-
             config: {
                 responseMimeType: "application/json",
-
-                responseSchema:
-                    z.toJSONSchema(resumePdfSchema)
+                responseSchema: z.toJSONSchema(resumePdfSchema)
             }
         })
 
@@ -386,7 +452,13 @@ CONTENT REQUIREMENTS:
             throw new Error("Gemini returned an empty response")
         }
 
-        const jsonContent = JSON.parse(response.text)
+        let jsonContent
+        try {
+            jsonContent = JSON.parse(response.text)
+        } catch (parseErr) {
+            const cleaned = response.text.replace(/```(?:json)?\n?/g, "").replace(/```/g, "").trim()
+            jsonContent = JSON.parse(cleaned)
+        }
 
         if (!jsonContent.html) {
             throw new Error("Gemini did not return HTML content")

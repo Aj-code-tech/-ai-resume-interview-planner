@@ -70,15 +70,15 @@ const Home = () => {
     const handleGenerateReport = async () => {
         if (!requireAuth()) return
         const fileToUpload = resumeFile || (resumeInputRef.current?.files ? resumeInputRef.current.files[0] : null)
-        if (!jobDescription) {
+        if (!jobDescription || !jobDescription.trim()) {
             alert("Please provide the Target Job Description.")
             return
         }
-        if (!fileToUpload && !selfDescription) {
+        if (!fileToUpload && (!selfDescription || !selfDescription.trim())) {
             alert("Please upload a Resume or provide a Quick Self-Description.")
             return
         }
-        const data = await generateReport({ jobDescription, selfDescription, resumeFile: fileToUpload })
+        const data = await generateReport({ jobDescription: jobDescription.trim(), selfDescription: selfDescription?.trim() || "", resumeFile: fileToUpload })
         if (data && data._id) {
             navigate(`/interview/${data._id}`)
         }

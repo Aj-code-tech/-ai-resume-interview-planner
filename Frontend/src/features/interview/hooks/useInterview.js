@@ -14,7 +14,7 @@ export const useInterview = () => {
         throw new Error("useInterview must be used within an InterviewProvider")
     }
 
-    const { loading, setLoading, report, setReport, reports, setReports } = context
+    const { loading, setLoading, downloadingResume, setDownloadingResume, report, setReport, reports, setReports } = context
     const { user } = useAuth()
 
    const generateReport = async ({ jobDescription, selfDescription, resumeFile }) => {
@@ -36,6 +36,8 @@ export const useInterview = () => {
         return response.interviewReport
 
     } catch (error) {
+        const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || "Failed to generate interview report. Please try again."
+        alert(errorMsg)
         return null
 
     } finally {
@@ -76,21 +78,33 @@ export const useInterview = () => {
 }
 
     const getResumePdf = async (interviewReportId) => {
-        setLoading(true)
-        let response = null
+        setDownloadingResume(true)
         try {
-            response = await generateResumePdf({ interviewReportId })
+            const response = await generateResumePdf({ interviewReportId })
             const url = window.URL.createObjectURL(new Blob([ response ], { type: "application/pdf" }))
             const link = document.createElement("a")
             link.href = url
             link.setAttribute("download", `resume_${interviewReportId}.pdf`)
             document.body.appendChild(link)
             link.click()
-        }
-        catch (error) {
-            // handle error silently
+            link.remove()
+            window.URL.revokeObjectURL(url)
+        } catch (error) {
+            let errorMsg = "Failed to download resume PDF. Please try again."
+            if (error.response?.data instanceof Blob) {
+                try {
+                    const text = await error.response.data.text()
+                    const parsed = JSON.parse(text)
+                    if (parsed.message) errorMsg = parsed.message
+                } catch (_) {}
+            } else if (error.response?.data?.message) {
+                errorMsg = error.response.data.message
+            } else if (error.message) {
+                errorMsg = error.message
+            }
+            alert(errorMsg)
         } finally {
-            setLoading(false)
+            setDownloadingResume(false)
         }
     }
 
@@ -104,7 +118,7 @@ export const useInterview = () => {
         }
     }, [ interviewId, user ])
 
-    return { loading, report, reports, generateReport, getReportById, getReports, getResumePdf }
+    return { loading, downloadingResume, report, reports, generateReport, getReportById, getReports, getResumePdf }
 
 }
 

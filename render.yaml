@@ -1,4 +1,4 @@
-﻿services:
+services:
   # ==============================
   # Backend - Node/Express
   # ==============================
@@ -6,7 +6,7 @@
     name: gen-ai-resume-backend
     runtime: node
     rootDir: GEN-Ai-backend
-    buildCommand: npm install
+    buildCommand: npm install && npx puppeteer browsers install chrome
     startCommand: npm start
     plan: free
     healthCheckPath: /health
