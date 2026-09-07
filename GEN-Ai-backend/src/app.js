@@ -4,15 +4,15 @@ const cors = require("cors");
 
 const app = express();
 
-// Trust reverse proxy for HTTPS cookies on Render/cloud platforms
+// Trust reverse proxy for HTTPS cookies on Render
 app.set("trust proxy", 1);
 
-// Body parser
+// ===============================
+// MIDDLEWARE
+// ===============================
+
 app.use(express.json());
-
-// Cookie parser
 app.use(cookieParser());
-
 
 // ===============================
 // CORS CONFIGURATION
@@ -20,6 +20,7 @@ app.use(cookieParser());
 
 const allowedOrigins = [
     process.env.FRONTEND_URL,
+    "https://gen-ai-resume-frontend-4wes.onrender.com",
     "http://localhost:5173",
     "http://localhost:3000",
     "http://localhost:4173"
@@ -27,9 +28,8 @@ const allowedOrigins = [
 
 const corsOptions = {
     origin: function (origin, callback) {
-
-        // Allow requests without an Origin
-        // (Postman, server-to-server requests, etc.)
+        // Allow requests without Origin
+        // (Postman, direct browser requests, etc.)
         if (!origin) {
             return callback(null, true);
         }
@@ -57,8 +57,11 @@ const corsOptions = {
     ]
 };
 
+// Apply CORS
 app.use(cors(corsOptions));
 
+// Explicitly handle CORS preflight requests
+app.options(/.*/, cors(corsOptions));
 
 // ===============================
 // HEALTH CHECK
@@ -71,7 +74,6 @@ app.get("/health", (req, res) => {
     });
 });
 
-
 // ===============================
 // ROUTES
 // ===============================
@@ -81,7 +83,6 @@ const interviewRouter = require("./routes/interview.routes");
 
 app.use("/api/auth", authRouter);
 app.use("/api/interview", interviewRouter);
-
 
 // ===============================
 // EXPORT APP
