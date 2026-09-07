@@ -1,0 +1,46 @@
+﻿services:
+  # Backend Web Service
+  - type: web
+    name: gen-ai-resume-backend
+    runtime: node
+    rootDir: GEN-Ai-backend
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_GENAI_API_KEY
+        sync: false
+      - key: CLIENT_URL
+        fromStaticSite:
+          name: gen-ai-resume-frontend
+          property: url
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/project/src/GEN-Ai-backend/.cache/puppeteer
+
+  # Frontend Static Site
+  - type: web
+    name: gen-ai-resume-frontend
+    runtime: static
+    rootDir: Frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    plan: free
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: gen-ai-resume-backend
+          property: url
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
