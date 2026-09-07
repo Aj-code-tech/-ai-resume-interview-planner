@@ -18,7 +18,7 @@ app.use(cookieParser());
 // CORS CONFIGURATION
 // ===============================
 
-const allowedOrigins = [
+const rawAllowedOrigins = [
     process.env.FRONTEND_URL,
     "https://gen-ai-resume-frontend-4wes.onrender.com",
     "http://localhost:5173",
@@ -26,19 +26,27 @@ const allowedOrigins = [
     "http://localhost:4173"
 ].filter(Boolean);
 
+// Strip trailing slashes so matching always succeeds
+const allowedOrigins = rawAllowedOrigins.map(url => url.replace(/\/$/, ""));
+
 const corsOptions = {
     origin: function (origin, callback) {
-        // Allow requests without Origin
-        // (Postman, direct browser requests, etc.)
+        // Allow requests without Origin (curl, server-to-server, etc.)
         if (!origin) {
             return callback(null, true);
         }
 
-        if (allowedOrigins.includes(origin)) {
+        const normalizedOrigin = origin.replace(/\/$/, "");
+
+        if (
+            allowedOrigins.includes(normalizedOrigin) ||
+            normalizedOrigin.endsWith(".onrender.com") ||
+            normalizedOrigin.endsWith(".vercel.app")
+        ) {
             return callback(null, true);
         }
 
-        return callback(new Error("Not allowed by CORS"));
+        return callback(null, false);
     },
 
     credentials: true,
@@ -53,7 +61,10 @@ const corsOptions = {
 
     allowedHeaders: [
         "Content-Type",
-        "Authorization"
+        "Authorization",
+        "Cookie",
+        "Accept",
+        "X-Requested-With"
     ]
 };
 
