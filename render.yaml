@@ -6,12 +6,9 @@
     name: gen-ai-resume-backend
     runtime: node
     rootDir: GEN-Ai-backend
-
     buildCommand: npm install
     startCommand: npm start
-
     plan: free
-
     healthCheckPath: /health
 
     envVars:
@@ -19,7 +16,7 @@
         value: production
 
       - key: PORT
-        value: 10000
+        value: "10000"
 
       - key: MONGO_URI
         sync: false
@@ -31,9 +28,7 @@
         sync: false
 
       - key: FRONTEND_URL
-        fromStaticSite:
-          name: gen-ai-resume-frontend
-          property: url
+        sync: false
 
       - key: PUPPETEER_CACHE_DIR
         value: /opt/render/project/src/GEN-Ai-backend/.cache/puppeteer
@@ -46,16 +41,12 @@
     name: gen-ai-resume-frontend
     runtime: static
     rootDir: Frontend
-
     buildCommand: npm install && npm run build
     staticPublishPath: dist
 
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: gen-ai-resume-backend
-          property: url
+        sync: false
 
     routes:
       - type: rewrite
