@@ -1,13 +1,17 @@
 ﻿services:
-
-  # Backend Web Service
+  # ==============================
+  # Backend - Node/Express
+  # ==============================
   - type: web
     name: gen-ai-resume-backend
     runtime: node
     rootDir: GEN-Ai-backend
+
     buildCommand: npm install
     startCommand: npm start
+
     plan: free
+
     healthCheckPath: /health
 
     envVars:
@@ -26,34 +30,32 @@
       - key: GOOGLE_GENAI_API_KEY
         sync: false
 
-      # Automatically gets frontend's public Render URL
       - key: FRONTEND_URL
-        fromService:
-          type: web
+        fromStaticSite:
           name: gen-ai-resume-frontend
-          envVarKey: RENDER_EXTERNAL_URL
+          property: url
 
       - key: PUPPETEER_CACHE_DIR
         value: /opt/render/project/src/GEN-Ai-backend/.cache/puppeteer
 
 
-  # Frontend Static Site
+  # ==============================
+  # Frontend - React/Vite
+  # ==============================
   - type: web
     name: gen-ai-resume-frontend
     runtime: static
     rootDir: Frontend
+
     buildCommand: npm install && npm run build
     staticPublishPath: dist
-    plan: free
 
     envVars:
-
-      # Automatically gets backend's public Render URL
       - key: VITE_API_URL
         fromService:
           type: web
           name: gen-ai-resume-backend
-          envVarKey: RENDER_EXTERNAL_URL
+          property: url
 
     routes:
       - type: rewrite
