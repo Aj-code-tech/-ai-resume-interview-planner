@@ -19,6 +19,20 @@ authRouter.post("/register" ,authController.registerUserController)
  */
 authRouter.post("/login" ,authController.loginUserController)
 
+/**
+ * @route POST   /api/auth/forgot-password
+ * @description Send a password reset link to the user's email
+ * @access Public
+ */
+authRouter.post("/forgot-password", authController.forgotPasswordController)
+
+/**
+ * @route POST   /api/auth/reset-password
+ * @description Set a new password using a valid reset token
+ * @access Public
+ */
+authRouter.post("/reset-password", authController.resetPasswordController)
+
 
 /** 
  * @route POST   /api/auth/logout

@@ -1,7 +1,9 @@
 const userModel = require("../models/user.model")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
+const crypto = require("crypto")
 const tokenBlacklistModel = require("../models/blacklist.model")
+const { sendPasswordResetEmail } = require("../services/email.service")
 
 const isProduction = process.env.NODE_ENV === "production"
 
@@ -126,6 +128,116 @@ async function loginUserController(req, res) {
     }
 }
 
+/**
+ * @name forgotPasswordController
+ * @description send a single-use password reset link to the user's email
+ * @access Public
+ */
+async function forgotPasswordController(req, res) {
+    try {
+        const email = typeof req.body?.email === "string" ? req.body.email.trim() : ""
+
+        if (!email) {
+            return res.status(400).json({
+                message: "Please provide an email address"
+            })
+        }
+
+        const user = await userModel.findOne({ email })
+
+        if (!user) {
+            return res.status(200).json({
+                message: "If an account exists for this email, a password reset link has been sent."
+            })
+        }
+
+        const resetToken = crypto.randomBytes(32).toString("hex")
+        const hashedResetToken = crypto.createHash("sha256").update(resetToken).digest("hex")
+        const resetPasswordExpires = new Date(Date.now() + 30 * 60 * 1000)
+
+        await userModel.updateOne(
+            { _id: user._id },
+            { $set: { resetPasswordToken: hashedResetToken, resetPasswordExpires } }
+        )
+
+        try {
+            const frontendUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL
+            if (!frontendUrl) {
+                throw new Error("CLIENT_URL or FRONTEND_URL must be configured to send password reset links")
+            }
+
+            const resetUrl = `${frontendUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(resetToken)}`
+            await sendPasswordResetEmail({ email: user.email, resetUrl })
+        } catch (err) {
+            await userModel.updateOne(
+                { _id: user._id, resetPasswordToken: hashedResetToken },
+                { $unset: { resetPasswordToken: 1, resetPasswordExpires: 1 } }
+            )
+            throw err
+        }
+
+        return res.status(200).json({
+            message: "If an account exists for this email, a password reset link has been sent."
+        })
+    } catch (err) {
+        console.error("Forgot password error:", err)
+        return res.status(500).json({
+            message: "Unable to send a password reset email right now. Please try again later."
+        })
+    }
+}
+
+/**
+ * @name resetPasswordController
+ * @description replace the user's password using a valid, unexpired reset token
+ * @access Public
+ */
+async function resetPasswordController(req, res) {
+    try {
+        const { token, newPassword } = req.body || {}
+
+        if (typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) {
+            return res.status(400).json({
+                message: "Invalid or expired password reset link"
+            })
+        }
+
+        if (typeof newPassword !== "string" || newPassword.length < 8) {
+            return res.status(400).json({
+                message: "Password must be at least 8 characters long"
+            })
+        }
+
+        const hashedResetToken = crypto.createHash("sha256").update(token).digest("hex")
+        const password = await bcrypt.hash(newPassword, 10)
+        const result = await userModel.updateOne(
+            {
+                resetPasswordToken: hashedResetToken,
+                resetPasswordExpires: { $gt: new Date() }
+            },
+            {
+                $set: { password },
+                $unset: { resetPasswordToken: 1, resetPasswordExpires: 1 }
+            }
+        )
+
+        if (result.modifiedCount !== 1) {
+            return res.status(400).json({
+                message: "Invalid or expired password reset link"
+            })
+        }
+
+        return res.status(200).json({
+            message: "Password reset successfully. You can now log in with your new password."
+        })
+    } catch (err) {
+        console.error("Reset password error:", err)
+        return res.status(500).json({
+            message: "Unable to reset password right now. Please try again later."
+        })
+    }
+}
+
 
 /**
  * @name logoutUserController
@@ -193,6 +305,8 @@ async function getMeController(req, res) {
 module.exports = {
     registerUserController,
     loginUserController,
+    forgotPasswordController,
+    resetPasswordController,
     logoutUserController,
     getMeController
 }

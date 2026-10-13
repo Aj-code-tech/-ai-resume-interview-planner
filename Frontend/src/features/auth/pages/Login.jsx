@@ -73,6 +73,8 @@ const Login = () => {
               />
             </div>
 
+            <p><Link to="/forgot-password">Forgot password?</Link></p>
+
             <button disabled={loading} className='button primary-button'>
               {loading ? "Logging in..." : "Login"}
             </button>
