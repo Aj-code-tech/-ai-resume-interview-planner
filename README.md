@@ -1,5 +1,8 @@
 #  AI Resume Interview Planner
 
+project URL =  https://gen-ai-resume-frontend-4wes.onrender.com/
+
+
 ##  Project Overview
 
 **AI Resume Interview Planner** is a full-stack AI-powered application that helps candidates analyze their resumes against a job description and prepare for interviews.
