@@ -61,9 +61,10 @@ async function generateInterViewReportController(req, res) {
         })
     } catch (error) {
         console.error("generateInterViewReportController error:", error)
-        res.status(500).json({
+        const status = error.status === 429 ? 429 : 500
+        res.status(status).json({
             message: error.message || "Failed to generate interview report.",
-            error: error.message
+            ...(status !== 429 && { error: error.message })
         })
     }
 }

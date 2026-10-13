@@ -27,7 +27,20 @@ async function generateContentWithRetry(ai, requestConfig) {
                 }
             } catch (err) {
                 lastError = err
-                if (err?.status === 503 || err?.message?.includes("503") || err?.status === 429) {
+                const errorMessage = String(err?.message || "").toLowerCase()
+                const isQuotaError = err?.status === 429
+                    || err?.code === 429
+                    || errorMessage.includes("resource_exhausted")
+                    || errorMessage.includes("quota exceeded")
+
+                if (isQuotaError) {
+                    throw Object.assign(
+                        new Error("Gemini API quota is exhausted. Wait until the quota resets or enable billing/increase the quota for the Google AI project used by this API key."),
+                        { status: 429 }
+                    )
+                }
+
+                if (err?.status === 503 || errorMessage.includes("503")) {
                     console.warn(`Model ${model} attempt ${attempt} hit ${err?.status || 'transient error'}, retrying...`)
                     await new Promise(res => setTimeout(res, 1000))
                 } else {
